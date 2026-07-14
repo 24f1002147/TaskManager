@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>My Task Manager App</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.4.21/vue.global.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.6.8/axios.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f0f0f0;
+      margin: 0;
+      padding: 20px;
+    }
+    .container {
+      max-width: 700px;
+      margin: 0 auto;
+      background: white;
+      padding: 20px;
+      border-radius: 5px;
+      box-shadow: 0px 0px 5px #ccc;
+    }
+    h1 {
+      color: #333;
+      text-align: center;
+    }
+    input, select, textarea {
+      width: 95%;
+      padding: 8px;
+      margin: 5px 0;
+      border: 1px solid #ccc;
+    }
+    button {
+      background-color: #4CAF50;
+      color: white;
+      padding: 8px 15px;
+      border: none;
+      cursor: pointer;
+      margin-top: 5px;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    .task-item {
+      border: 1px solid #ddd;
+      padding: 10px;
+      margin: 8px 0;
+      border-radius: 3px;
+    }
+    .done {
+      text-decoration: line-through;
+      color: gray;
+    }
+    .priority-high { border-left: 5px solid red; }
+    .priority-medium { border-left: 5px solid orange; }
+    .priority-low { border-left: 5px solid green; }
+    .error-msg { color: red; }
+    .top-bar { display: flex; justify-content: space-between; align-items: center; }
+    .logout-btn { background-color: #f44336; }
+    .del-btn { background-color: #f44336; margin-left: 5px; }
+  </style>
+</head>
+<body>
+
+  <div id="app" class="container">
+
+    <div v-if="!token">
+      <h1>Login / Register</h1>
+      <p class="error-msg" v-if="errorMsg">{{ errorMsg }}</p>
+      <input type="text" v-model="email" placeholder="Email">
+      <input type="password" v-model="password" placeholder="Password">
+      <br>
+      <button @click="login">Login</button>
+      <button @click="register">Register</button>
+    </div>
+
+    <div v-else>
+      <div class="top-bar">
+        <h1>My Tasks</h1>
+        <button class="logout-btn" @click="logout">Logout</button>
+      </div>
+
+      <div>
+        <input type="text" v-model="newTitle" placeholder="Task title">
+        <textarea v-model="newDesc" placeholder="Description"></textarea>
+        <select v-model="newPriority">
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+        </select>
+        <br>
+        <button @click="addTask">Add Task</button>
+      </div>
+
+      <hr>
+
+      <div v-if="tasks.length == 0">
+        <p>No tasks yet, add one above!</p>
+      </div>
+
+      <div class="task-item" v-for="task in tasks" :key="task.id" :class="'priority-' + task.priority">
+        <input type="checkbox" :checked="task.done" @change="toggleDone(task)">
+        <b :class="{done: task.done}">{{ task.title }}</b>
+        <p :class="{done: task.done}">{{ task.desc }}</p>
+        <small>priority: {{ task.priority }}</small>
+        <button class="del-btn" @click="deleteTask(task.id)">Delete</button>
+      </div>
+
+    </div>
+
+  </div>
+
+  <script>
+    const API_URL = "http://127.0.0.1:5000/api"
+
+    const app = Vue.createApp({
+      data() {
+        return {
+          email: '',
+          password: '',
+          token: localStorage.getItem('token') || '',
+          errorMsg: '',
+          tasks: [],
+          newTitle: '',
+          newDesc: '',
+          newPriority: 'medium'
+        }
+      },
+      mounted() {
+        if (this.token) {
+          this.getTasks()
+        }
+      },
+      methods: {
+        register() {
+          axios.post(API_URL + '/register', {
+            email: this.email,
+            password: this.password
+          }).then(res => {
+            alert('registered! now login')
+          }).catch(err => {
+            this.errorMsg = err.response.data.msg
+          })
+        },
+        login() {
+          axios.post(API_URL + '/login', {
+            email: this.email,
+            password: this.password
+          }).then(res => {
+            this.token = res.data.token
+            localStorage.setItem('token', this.token)
+            this.errorMsg = ''
+            this.getTasks()
+          }).catch(err => {
+            this.errorMsg = 'login failed, check email/password'
+          })
+        },
+        logout() {
+          this.token = ''
+          localStorage.removeItem('token')
+          this.tasks = []
+        },
+        getTasks() {
+          axios.get(API_URL + '/tasks', {
+            headers: { 'Authentication-Token': this.token }
+          }).then(res => {
+            this.tasks = res.data
+          }).catch(err => {
+            console.log(err)
+          })
+        },
+        addTask() {
+          if (this.newTitle == '') {
+            alert('title cant be empty')
+            return
+          }
+          axios.post(API_URL + '/tasks', {
+            title: this.newTitle,
+            desc: this.newDesc,
+            priority: this.newPriority
+          }, {
+            headers: { 'Authentication-Token': this.token }
+          }).then(res => {
+            this.newTitle = ''
+            this.newDesc = ''
+            this.newPriority = 'medium'
+            this.getTasks()
+          })
+        },
+        toggleDone(task) {
+          axios.put(API_URL + '/tasks/' + task.id, {
+            done: !task.done
+          }, {
+            headers: { 'Authentication-Token': this.token }
+          }).then(res => {
+            this.getTasks()
+          })
+        },
+        deleteTask(id) {
+          axios.delete(API_URL + '/tasks/' + id, {
+            headers: { 'Authentication-Token': this.token }
+          }).then(res => {
+            this.getTasks()
+          })
+        }
+      }
+    })
+
+    app.mount('#app')
+  </script>
+
+</body>
+</html>
